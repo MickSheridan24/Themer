@@ -2,8 +2,8 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 import baseTheme from "./tokenTheme";
-import editorTheme from "./editorTheme"
-
+import editorTheme from "./editorTheme";
+import Color from "./colorManagers";
 
 interface themeJson {
 	textMateRules: tokenColor[],
@@ -35,47 +35,73 @@ interface colors{
 
 const isColor = (val: any) => typeof(val) === "string" && (val as string).startsWith("#")
 
-const randomColor = () =>{
-	var options = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f"];
+interface randomHSLOptions{
+	maxSat?: number,
+	minSat?: number,
+	maxLum?: number,
+	minLum?: number,
+	setHue?: number, 
+}
 
-	var str = "#";
-	for(let x = 0; x < 6; x++){
-		str += options[Math.floor(Math.random() * options.length)];
-	}
-	return str;
+const randomHSLColor = (options: randomHSLOptions) => {
+	let {maxSat,  minSat, maxLum, minLum, setHue} = options; 
+	maxSat = maxSat ?? 100;
+	maxLum = maxLum ?? 100;
+	minLum = minLum ?? 0;
+	minSat = minSat ?? 0;
+	var lumDiff = maxLum - minLum;
+	var satDiff = maxSat - minSat;
+	const hue = !setHue ? Math
+	.floor(Math.random() * 360) : setHue!; 
+	const sat = Math.floor(Math.random() * satDiff) + minSat;
+	const lum = Math.floor(Math.random() * lumDiff) + minLum;
+	
+	return {h: hue, s: sat, l: lum};
 };
 
-const randomizeBaseTheme = (theme: themeJson) => {
+
+
+
+
+const splitComplimentEditor = (theme: any, baseColor: Color, textColor: Color) => {
+
+
+
+	assignColors(theme.foregrounds,[textColor.tetradics.first, textColor.tetradics.second, textColor.tetradics.third, textColor.base]);
+	assignColors(theme.backgrounds, [baseColor.triadics.first, baseColor.triadics.second, baseColor.base]);
+	assignColors(theme, [baseColor.compliment]);
+
+	var out = {...theme};
+	Object.keys(theme.foregrounds).forEach(k => {
+		out[k] = theme.foregrounds[k];
+	});
+	Object.keys(theme.backgrounds).forEach(k => {
+		out[k] = theme.backgrounds[k];
+	});
+	return out;
+};
+
+
+
+const assignColors = (obj: any, colors: string[]) =>{
+	Object.keys(obj).forEach(k => {
+		if(k !== "foregrounds" && k !== "backgrounds"){
+			var rand = Math.floor(Math.random() * colors.length);
+			obj[k] = colors[rand];
+		}
+	});
+}
+
+const randomizeBaseTheme = (theme: themeJson, themeColor: Color) => {
+
+
 	theme.textMateRules = theme.textMateRules.map(tm => {
-		tm.settings.background = randomColor();
-		tm.settings.foreground = randomColor();
+		tm.settings.foreground = themeColor.randomAspect();
 		return tm;
 	});
 	return theme;
-};
-
-
-const randomizeObject = (node : any) =>{
-
-	if(!!Object.keys(node).length){
-		Object.keys(node).forEach(key => {
-			if(isColor(node[key])){
-				node[key] = randomColor();
-			}
-			else{
-				node[key] = randomizeObject(node[key]);
-			}
-		});
-	}
-	return node; 
-};
-
-const randomizeEditor = (obj: any) => {
-	Object.keys(obj).forEach(key => {
-		obj[key] = randomColor();
-	});
-	return obj;
 }
+
 
 export function activate(context: vscode.ExtensionContext) {
 	
@@ -90,8 +116,24 @@ export function activate(context: vscode.ExtensionContext) {
 		// Display a message box to the user
 		 vscode.window.showInformationMessage('Randomize!');
 
-		var randomizedTokens = randomizeBaseTheme(baseTheme);
-		var randomizedEditor = randomizeEditor(editorTheme);
+		 var hsl = randomHSLColor({
+			maxLum: 50,
+			minLum: 0,
+			maxSat: 100,
+			minSat: 0,
+		});
+		var textHsl = randomHSLColor({
+			setHue: hsl.h,
+			maxLum: 100,
+			minLum: 50,
+			maxSat: 100,
+			minSat: 0,
+		});
+		var baseColor = Color.fromHSL(hsl);
+		var textColor = Color.fromHSL(textHsl);
+
+		 var randomizedTokens = randomizeBaseTheme(baseTheme, textColor);
+		var randomizedEditor = splitComplimentEditor(editorTheme, baseColor, textColor);
 
 		vscode.workspace.getConfiguration().update("editor.tokenColorCustomizations", randomizedTokens);
 		vscode.workspace.getConfiguration().update("workbench.colorCustomizations", randomizedEditor);
